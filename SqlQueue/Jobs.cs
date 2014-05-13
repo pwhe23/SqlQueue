@@ -1,15 +1,19 @@
 ﻿using System;
 using System.IO;
-using System.Threading;
 
 namespace SqlQueue
 {
+    /// <summary>
+    /// Represents a task that needs to be completed. Additional data can be stored in the Data field whose type can be indicated by the Type field.
+    /// </summary>
     public class Job
     {
         public string Id { get; set; }
         public DateTime Created { get; set; }
         public DateTime? Processed { get; set; }
         public DateTime? Completed { get; set; }
+        public string Type { get; set; }
+        public string Data { get; set; }
     };
 
     public class Jobs
@@ -24,7 +28,7 @@ namespace SqlQueue
             _connectionString = cs;
             CheckForTable();
         }
-        
+
         public bool UseDequeue { get; set; }
 
         private void CheckForTable()
@@ -42,7 +46,7 @@ namespace SqlQueue
             {
                 db.Execute(@"
                     IF (NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='Jobs')) BEGIN
-                        CREATE TABLE [Jobs] (Id varchar(50) PRIMARY KEY, Created datetime, Processed datetime NULL, Completed datetime NULL);
+                        CREATE TABLE [Jobs] (Id varchar(50) PRIMARY KEY, Created datetime, Processed datetime NULL, Completed datetime NULL, [Type] varchar(MAX) NULL, [Data] varchar(MAX) NULL);
                     END
                 ");
             }
@@ -137,67 +141,5 @@ namespace SqlQueue
                 PRINT 'FAILED'
             END
         ";
-    };
-
-    public static class Producer
-    {
-        public static void Run()
-        {
-            var jobs = new Jobs();
-            while (true)
-            {
-                Thread.Sleep(100);
-
-                var job = new Job
-                          {
-                              Id = Guid.NewGuid().ToString("N"),
-                              Created = DateTime.Now,
-                          };
-                jobs.Enqueue(job);
-
-                Console.WriteLine("Created Job '{0}' at '{1:hh:mm:ss.fff}'", job.Id, job.Created);
-            }
-        }
-    };
-
-    public static class Consumer
-    {
-        public static void Run()
-        {
-            var random = new Random();
-            var jobs = new Jobs { UseDequeue = true }; //Use false to test without proc
-            var quit = false;
-            var waiting = false;
-
-            while (!quit)
-            {
-                var job = jobs.Dequeue();
-
-                if (job == null)
-                {
-                    if (!waiting)
-                    {
-                        waiting = true;
-                        Console.WriteLine("Waiting for job...");
-                    }
-                    continue;
-                }
-
-                waiting = false;
-                Thread.Sleep(100 * random.Next(1, 20)); //do random work
-
-                try
-                {
-                    jobs.Complete(job.Id);
-                    Console.WriteLine("Completed job '{0}'", job.Id);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("> ERROR: " + ex.Message);
-                    quit = true;
-                    Console.ReadKey();
-                }
-            }
-        }
     };
 }
